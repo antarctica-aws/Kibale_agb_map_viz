@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kibale AGBD Map Comparison</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="bounds.js"></script>
+  <script src="plots.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    header {
+      padding: 8px 18px;
+      background: #16213e;
+      border-bottom: 2px solid #0f3460;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    header h1  { font-size: 1rem; font-weight: 600; }
+    header .sub { font-size: 0.72rem; color: #aaa; margin-top: 2px; }
+
+    /* ── Tab bar ─────────────────────────────────────────────────────────── */
+    #tab-bar {
+      display: flex;
+      background: #0f3460;
+      flex-shrink: 0;
+    }
+    #tab-bar button {
+      flex: 1;
+      padding: 8px 0;
+      background: transparent;
+      border: none;
+      color: #aac;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.3px;
+      border-bottom: 3px solid transparent;
+      transition: all 0.18s;
+    }
+    #tab-bar button.active {
+      color: #fff;
+      border-bottom-color: #41ab5d;
+      background: rgba(255,255,255,0.06);
+    }
+    #tab-bar button:hover:not(.active) { color: #dde; background: rgba(255,255,255,0.04); }
+
+    /* ── Map wrapper ─────────────────────────────────────────────────────── */
+    #map-wrap {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+    }
+    #map { width: 100%; height: 100%; }
+
+    /* ── Slider handle ───────────────────────────────────────────────────── */
+    #slider-handle {
+      position: absolute;
+      top: 0; left: 50%;
+      width: 44px; height: 100%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      cursor: ew-resize;
+    }
+    #slider-handle::before {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0; left: 50%;
+      width: 3px;
+      transform: translateX(-50%);
+      background: #fff;
+      box-shadow: 0 0 6px rgba(0,0,0,0.7);
+    }
+    #slider-btn {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+      user-select: none;
+    }
+    #slider-btn svg { width: 22px; height: 22px; }
+
+    /* ── Layer labels ────────────────────────────────────────────────────── */
+    .map-label {
+      position: absolute;
+      bottom: 160px;
+      z-index: 900;
+      background: rgba(22,33,62,0.82);
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      pointer-events: none;
+    }
+    #label-left  { left: 12px; }
+    #label-right { right: 12px; }
+
+    /* ── Colorbar legend ─────────────────────────────────────────────────── */
+    #legend {
+      position: absolute;
+      bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(22,33,62,0.88);
+      border-radius: 6px;
+      padding: 8px 14px;
+      z-index: 900;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 4px;
+      font-size: 0.74rem;
+      pointer-events: none;
+    }
+    #legend .title { font-weight: 600; }
+    #colorbar {
+      width: 210px; height: 13px;
+      border-radius: 3px;
+    }
+    #colorbar.agbd {
+      background: linear-gradient(to right,
+        #ffffe5,#f7fcb9,#d9f0a3,#addd8e,
+        #78c679,#41ab5d,#238443,#006837,#004529);
+    }
+    #colorbar.change {
+      background: linear-gradient(to right,
+        #a50026,#d73027,#f46d43,#fdae61,#fee08b,
+        #ffffbf,
+        #d9ef8b,#a6d96a,#66bd63,#1a9850,#006837);
+    }
+    .ticks {
+      width: 210px;
+      display: flex; justify-content: space-between;
+      color: #ccc;
+    }
+
+    /* ── Click info ──────────────────────────────────────────────────────── */
+    #click-info {
+      position: absolute;
+      bottom: 90px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(22,33,62,0.92);
+      border-radius: 6px;
+      padding: 9px 16px;
+      z-index: 900;
+      font-size: 0.76rem;
+      display: none;
+      min-width: 320px;
+      max-width: 480px;
+    }
+    #click-info .ci-coords { color: #aaa; margin-bottom: 6px; font-size: 0.72rem; }
+    #click-info .ci-values { display: flex; flex-direction: column; gap: 3px; margin-bottom: 7px; }
+    #click-info .ci-row    { display: flex; justify-content: space-between; gap: 16px; }
+    #click-info .ci-name   { color: #ccc; }
+    #click-info .ci-val    { font-weight: 600; color: #7ee8a2; }
+    #click-info .ci-val.nodata { color: #aaa; font-weight: 400; font-style: italic; }
+    #click-info a { color: #90cdf4; font-size: 0.72rem; }
+
+    /* ── Plot popup ──────────────────────────────────────────────────────── */
+    .plot-popup .leaflet-popup-content-wrapper {
+      background: rgba(22,33,62,0.97);
+      color: #eee;
+      border-radius: 6px;
+      border: 1px solid #0f3460;
+      font-size: 0.76rem;
+      box-shadow: 0 3px 12px rgba(0,0,0,0.6);
+    }
+    .plot-popup .leaflet-popup-tip { background: rgba(22,33,62,0.97); }
+    .plot-popup .leaflet-popup-content { margin: 10px 14px; min-width: 220px; }
+    .pp-title  { font-weight: 700; color: #90cdf4; margin-bottom: 6px; font-size: 0.8rem; }
+    .pp-table  { width: 100%; border-collapse: collapse; }
+    .pp-table th { color: #aaa; font-weight: 600; text-align: left; padding: 2px 6px 2px 0; font-size: 0.72rem; border-bottom: 1px solid #0f3460; }
+    .pp-table td { padding: 3px 6px 3px 0; vertical-align: top; }
+    .pp-table td:last-child { text-align: right; font-weight: 600; color: #7ee8a2; }
+    .pp-table td.nodata { color: #aaa; font-weight: 400; font-style: italic; }
+    .pp-delta  { margin-top: 6px; padding-top: 5px; border-top: 1px solid #0f3460; color: #ccc; }
+    .pp-delta span { font-weight: 700; }
+    .pp-delta .pos { color: #fc8181; }
+    .pp-delta .neg { color: #7ee8a2; }
+
+    /* ── Server warning banner ───────────────────────────────────────────── */
+    #server-warning {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(22,33,62,0.97);
+      border: 1px solid #e88;
+      border-radius: 8px;
+      padding: 20px 28px;
+      z-index: 2000;
+      font-size: 0.82rem;
+      max-width: 480px;
+      line-height: 1.6;
+      display: none;
+    }
+    #server-warning code {
+      display: block;
+      background: #0a0f1e;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: monospace;
+      font-size: 0.78rem;
+      color: #7ee8a2;
+      margin: 8px 0;
+      word-break: break-all;
+    }
+    #server-warning .warn-title { color: #e88; font-weight: 700; margin-bottom: 6px; font-size: 0.9rem; }
+
+    /* ── Opacity controls ────────────────────────────────────────────────── */
+    #controls {
+      position: absolute;
+      top: 12px; right: 12px;
+      z-index: 900;
+      background: rgba(22,33,62,0.88);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 0.74rem;
+      display: flex; flex-direction: column; gap: 6px;
+      min-width: 210px;
+    }
+    .ctrl-row { display: flex; align-items: center; gap: 8px; }
+    .ctrl-row input[type=range] { flex: 1; accent-color: #41ab5d; }
+    .ctrl-row input[type=range]:disabled { opacity: 0.35; }
+    .ctrl-name {
+      display: flex; align-items: center; gap: 6px;
+      color: #ccc; font-size: 0.73rem;
+      margin-bottom: 1px;
+    }
+    .ctrl-name input[type=checkbox] { accent-color: #41ab5d; width: 13px; height: 13px; cursor: pointer; flex-shrink: 0; }
+    .ctrl-name span { white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Kibale AGBD Map Comparison</h1>
+    <div class="sub">Drag the slider to compare &nbsp;|&nbsp; Click the map to open in Google Earth Pro</div>
+  </div>
+</header>
+
+<!-- Tab switcher -->
+<div id="tab-bar">
+  <button id="tab-2017"   class="active">2017 — AEF RF vs Landsat XGBoost</button>
+  <button id="tab-2020">2020 — AEF RF vs Landsat XGBoost</button>
+  <button id="tab-change">Change 2017 → 2020 (AEF vs Landsat)</button>
+</div>
+
+<div id="map-wrap">
+  <div id="map"></div>
+
+  <!-- Slider handle -->
+  <div id="slider-handle">
+    <div id="slider-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#333" stroke-width="2.2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 3 12 9 6"/>
+        <polyline points="15 6 21 12 15 18"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- Layer labels -->
+  <div class="map-label" id="label-left">AEF RF (GEE)</div>
+  <div class="map-label" id="label-right">Landsat XGBoost</div>
+
+  <!-- Colorbar legend -->
+  <div id="legend">
+    <div class="title" id="legend-title">AGBD 2017 (Mg ha&#8315;&#185;)</div>
+    <div id="colorbar" class="agbd"></div>
+    <div class="ticks" id="legend-ticks">
+      <span>0</span><span>100</span><span>200</span><span>300</span><span>400+</span>
+    </div>
+  </div>
+
+  <!-- Click info -->
+  <div id="click-info">
+    <div class="ci-coords" id="click-coords"></div>
+    <div class="ci-values" id="click-values"></div>
+    <a id="ge-link" href="#" target="_blank" rel="noopener">&#127758; View in Google Earth</a>
+  &nbsp;&nbsp;
+  <a id="kml-link" href="#" style="color:#90cdf4;font-size:0.72rem;">&#8659; Download KML (desktop)</a>
+  </div>
+
+  <!-- Opacity controls -->
+  <div id="controls">
+    <div style="font-weight:600;color:#eee;margin-bottom:5px;">Layer Controls</div>
+
+    <div class="ctrl-name">
+      <input type="checkbox" id="chk-left" checked>
+      <span id="label-op-left">AEF+RF model</span>
+    </div>
+    <div class="ctrl-row">
+      <input type="range" id="op-left" min="0" max="1" step="0.05" value="0.85">
+    </div>
+
+    <div class="ctrl-name" style="margin-top:4px;">
+      <input type="checkbox" id="chk-right" checked>
+      <span id="label-op-right">Landsat Composite+XGBoost model</span>
+    </div>
+    <div class="ctrl-row">
+      <input type="range" id="op-right" min="0" max="1" step="0.05" value="0.85">
+    </div>
+
+    <div style="border-top:1px solid #0f3460;margin:6px 0 2px;"></div>
+    <div class="ctrl-name">
+      <input type="checkbox" id="chk-plots-2017" checked>
+      <span>Field plots 2017</span>
+    </div>
+    <div class="ctrl-name" style="margin-top:3px;">
+      <input type="checkbox" id="chk-plots-2020" checked>
+      <span>Field plots 2020</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Bounds from bounds.js ([[S,W],[N,E]]) ────────────────────────────────────
+var B  = AOI_BOUNDS;
+var CENTER = [(B[0][0] + B[1][0]) / 2, (B[0][1] + B[1][1]) / 2];
+
+// ── Map ──────────────────────────────────────────────────────────────────────
+var map = L.map('map', { center: CENTER, zoom: 12, zoomControl: true });
+
+L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { attribution: 'Tiles &copy; Esri', maxZoom: 19 }
+).addTo(map);
+
+// ── Custom panes ─────────────────────────────────────────────────────────────
+var leftPane  = map.createPane('leftPane');
+var rightPane = map.createPane('rightPane');
+leftPane.style.zIndex  = 300;
+rightPane.style.zIndex = 299;
+
+// ── Image overlays (both use the same AOI_BOUNDS after clipping) ─────────────
+var leftLayer  = L.imageOverlay('aef_2017.png',  B, { opacity: 0.85, pane: 'leftPane'  }).addTo(map);
+var rightLayer = L.imageOverlay('ls_2017.png',   B, { opacity: 0.85, pane: 'rightPane' }).addTo(map);
+
+// ── Opacity + visibility controls ────────────────────────────────────────────
+var opLeft  = document.getElementById('op-left');
+var opRight = document.getElementById('op-right');
+var chkLeft  = document.getElementById('chk-left');
+var chkRight = document.getElementById('chk-right');
+
+opLeft.addEventListener('input', function () {
+  if (chkLeft.checked) leftLayer.setOpacity(parseFloat(this.value));
+});
+opRight.addEventListener('input', function () {
+  if (chkRight.checked) rightLayer.setOpacity(parseFloat(this.value));
+});
+
+chkLeft.addEventListener('change', function () {
+  leftLayer.setOpacity(this.checked ? parseFloat(opLeft.value) : 0);
+  opLeft.disabled = !this.checked;
+});
+chkRight.addEventListener('change', function () {
+  rightLayer.setOpacity(this.checked ? parseFloat(opRight.value) : 0);
+  opRight.disabled = !this.checked;
+});
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+var activeTab = '2017';
+
+var tabConfig = {
+  '2017': {
+    left:   'aef_2017.png',
+    right:  'ls_2017.png',
+    lblL:   'AEF RF (GEE)',
+    lblR:   'Landsat XGBoost',
+    title:  'AGBD 2017 (Mg ha&#8315;&#185;)',
+    cbar:   'agbd',
+    ticks:  ['0','100','200','300','400+'],
+  },
+  '2020': {
+    left:   'aef_2020.png',
+    right:  'ls_2020.png',
+    lblL:   'AEF RF (GEE)',
+    lblR:   'Landsat XGBoost',
+    title:  'AGBD 2020 (Mg ha&#8315;&#185;)',
+    cbar:   'agbd',
+    ticks:  ['0','100','200','300','400+'],
+  },
+  'change': {
+    left:   'aef_change.png',
+    right:  'ls_change.png',
+    lblL:   'AEF RF  \u0394 2017\u21922020',
+    lblR:   'Landsat  \u0394 2017\u21922020',
+    title:  '\u0394 AGBD 2017\u21922020 (Mg ha\u207b\u00b9)',
+    cbar:   'change',
+    ticks:  ['\u2212150','\u221275','0','+75','+150'],
+  }
+};
+
+function switchTab(id) {
+  if (activeTab === id) return;
+  activeTab = id;
+  var cfg = tabConfig[id];
+
+  // Update overlay images
+  leftLayer.setUrl(cfg.left);
+  rightLayer.setUrl(cfg.right);
+
+  // Update map labels
+  document.getElementById('label-left').textContent  = cfg.lblL;
+  document.getElementById('label-right').textContent = cfg.lblR;
+
+  // Update legend
+  document.getElementById('legend-title').innerHTML = cfg.title;
+  document.getElementById('colorbar').className = cfg.cbar;
+  var ticks = document.getElementById('legend-ticks');
+  ticks.innerHTML = cfg.ticks.map(function(t){ return '<span>' + t + '</span>'; }).join('');
+
+  // Tab button states
+  document.getElementById('tab-2017').classList.toggle('active',   id === '2017');
+  document.getElementById('tab-2020').classList.toggle('active',   id === '2020');
+  document.getElementById('tab-change').classList.toggle('active', id === 'change');
+}
+
+document.getElementById('tab-2017').addEventListener('click',   function(){ switchTab('2017'); });
+document.getElementById('tab-2020').addEventListener('click',   function(){ switchTab('2020'); });
+document.getElementById('tab-change').addEventListener('click', function(){ switchTab('change'); });
+
+// ── Slider drag ───────────────────────────────────────────────────────────────
+// Uses map.containerPointToLayerPoint() so the clip follows the map pane's
+// CSS transform during pan/zoom (same technique as leaflet-side-by-side).
+var wrap     = document.getElementById('map-wrap');
+var handle   = document.getElementById('slider-handle');
+var dragging = false;
+var sliderContainerX = wrap.offsetWidth / 2;  // pixels from left of map container
+
+function updateClip() {
+  var nw     = map.containerPointToLayerPoint([0, 0]);
+  var se     = map.containerPointToLayerPoint(map.getSize());
+  var clipX  = map.containerPointToLayerPoint([sliderContainerX, 0]).x;
+  // CSS clip: rect(top, right, bottom, left) in layer (local) coordinates
+  leftPane.style.clip = 'rect(' + nw.y + 'px,' + clipX  + 'px,' + se.y + 'px,' + nw.x + 'px)';
+}
+
+function setSliderX(clientX) {
+  var rect = wrap.getBoundingClientRect();
+  sliderContainerX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+  handle.style.left = sliderContainerX + 'px';
+  updateClip();
+}
+
+// Keep clip correct while map pans or zooms
+map.on('move zoom resize', updateClip);
+
+handle.addEventListener('mousedown',  function(e){ dragging = true; e.preventDefault(); });
+handle.addEventListener('touchstart', function(){  dragging = true; }, { passive: true });
+document.addEventListener('mousemove', function(e){ if (dragging) setSliderX(e.clientX); });
+document.addEventListener('touchmove', function(e){ if (dragging) setSliderX(e.touches[0].clientX); }, { passive: true });
+document.addEventListener('mouseup',  function(){ dragging = false; });
+document.addEventListener('touchend', function(){ dragging = false; });
+
+// Initialize clip at centre
+map.whenReady(function() {
+  sliderContainerX = wrap.offsetWidth / 2;
+  handle.style.left = sliderContainerX + 'px';
+  updateClip();
+});
+
+// ── Raw raster data for click-value lookup ────────────────────────────────────
+var rasterData    = {};   // name → Float32Array (once loaded)
+var rasterPromise = {};   // name → in-flight Promise (cleared on failure)
+
+function ensureDatLoaded(name) {
+  if (rasterData[name])    return Promise.resolve();
+  if (rasterPromise[name]) return rasterPromise[name];
+
+  rasterPromise[name] = new Promise(function(resolve, reject) {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', name + '.dat');
+    xhr.responseType = 'arraybuffer';
+    xhr.onload = function() {
+      // status 0 = file:// protocol success on some browsers
+      if (xhr.status === 200 || xhr.status === 0) {
+        rasterData[name] = new Float32Array(xhr.response);
+        resolve();
+      } else {
+        delete rasterPromise[name];
+        reject(new Error(name + '.dat — HTTP ' + xhr.status +
+          '. Start the server with:\n' +
+          '/home/users/mliang77/.micromamba/envs/gdal-env/bin/python -m http.server 8888'));
+      }
+    };
+    xhr.onerror = function() {
+      delete rasterPromise[name];
+      reject(new Error('Cannot reach server. Run from agb_map_viz/:\n' +
+        '/home/users/mliang77/.micromamba/envs/gdal-env/bin/python -m http.server 8888'));
+    };
+    xhr.send();
+  });
+  return rasterPromise[name];
+}
+
+// Preload all dat files in the background immediately
+['aef_2017','ls_2017','aef_2020','ls_2020','aef_change','ls_change']
+  .forEach(function(n) { ensureDatLoaded(n); });
+
+// Pixel lookup (called only after ensureDatLoaded resolves)
+function lookupValue(datKey, metaKey, lat, lng) {
+  var arr  = rasterData[datKey];
+  var S = AOI_BOUNDS[0][0], W = AOI_BOUNDS[0][1];
+  var N = AOI_BOUNDS[1][0], E = AOI_BOUNDS[1][1];
+  var rows = LAYER_META[metaKey].rows;
+  var cols = LAYER_META[metaKey].cols;
+  var row = Math.floor((N - lat) / (N - S) * rows);
+  var col = Math.floor((lng - W) / (E - W) * cols);
+  if (row < 0 || row >= rows || col < 0 || col >= cols) return null;
+  var v = arr[row * cols + col];
+  return isNaN(v) || !isFinite(v) ? null : v;
+}
+
+// Per-tab configuration for which dat files and labels to use
+var tabDatConfig = {
+  '2017':   { datL: 'aef_2017',   metaL: 'aef', lblL: 'AEF+RF model (2017)',                  datR: 'ls_2017',   metaR: 'ls', lblR: 'Landsat Composite+XGBoost (2017)', unit: 'Mg ha\u207b\u00b9' },
+  '2020':   { datL: 'aef_2020',   metaL: 'aef', lblL: 'AEF+RF model (2020)',                  datR: 'ls_2020',   metaR: 'ls', lblR: 'Landsat Composite+XGBoost (2020)', unit: 'Mg ha\u207b\u00b9' },
+  'change': { datL: 'aef_change', metaL: 'aef', lblL: 'AEF+RF \u0394 2017\u21922020',  datR: 'ls_change', metaR: 'ls', lblR: 'Landsat \u0394 2017\u21922020', unit: 'Mg ha\u207b\u00b9' },
+};
+
+function fmtVal(v, unit) {
+  if (v === null) return '<span class="ci-val nodata">outside AOI / no data</span>';
+  return '<span class="ci-val">' + v.toFixed(1) + ' ' + unit + '</span>';
+}
+
+// ── Click → value lookup + Google Earth links ────────────────────────────────
+var clickMarker = null;
+
+function handleMapClick(lat, lng) {
+  var latS = lat.toFixed(6), lngS = lng.toFixed(6);
+
+  // Update or create the red marker
+  var ll = L.latLng(lat, lng);
+  if (clickMarker) clickMarker.setLatLng(ll);
+  else clickMarker = L.circleMarker(ll, {
+    radius: 6, color: '#fff', weight: 2, fillColor: '#e53e3e', fillOpacity: 0.9
+  }).addTo(map);
+
+  // Show panel immediately with coordinates + loading state
+  document.getElementById('click-coords').textContent = 'Lat ' + latS + '   Lng ' + lngS;
+  document.getElementById('click-values').innerHTML =
+    '<span style="color:#aaa;font-style:italic">Loading values\u2026</span>';
+  document.getElementById('click-info').style.display = 'block';
+
+  // Capture tab at click time; wait for both dat files then display values
+  var dc         = tabDatConfig[activeTab];
+  var clickedTab = activeTab;
+
+  Promise.all([ensureDatLoaded(dc.datL), ensureDatLoaded(dc.datR)])
+    .then(function() {
+      if (activeTab !== clickedTab) return;
+      var vL = lookupValue(dc.datL, dc.metaL, lat, lng);
+      var vR = lookupValue(dc.datR, dc.metaR, lat, lng);
+      document.getElementById('click-values').innerHTML =
+        '<div class="ci-row"><span class="ci-name">' + dc.lblL + '</span>' + fmtVal(vL, dc.unit) + '</div>' +
+        '<div class="ci-row"><span class="ci-name">' + dc.lblR + '</span>' + fmtVal(vR, dc.unit) + '</div>';
+    })
+    .catch(function(err) {
+      var msg = (err && err.message) ? err.message : String(err);
+      document.getElementById('click-values').innerHTML =
+        '<span style="color:#e88;white-space:pre-wrap;font-size:0.7rem">' +
+        msg.replace(/</g,'&lt;') + '</span>';
+    });
+
+  // KML for Google Earth Pro
+  var kml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<kml xmlns="http://www.opengis.net/kml/2.2">',
+    '  <Document><name>Kibale AGBD</name>',
+    '    <LookAt>',
+    '      <longitude>' + lngS + '</longitude><latitude>' + latS + '</latitude>',
+    '      <altitude>0</altitude><range>2000</range><tilt>0</tilt><heading>0</heading>',
+    '      <altitudeMode>relativeToGround</altitudeMode>',
+    '    </LookAt>',
+    '    <Placemark>',
+    '      <name>' + latS + ', ' + lngS + '</name>',
+    '      <Point><coordinates>' + lngS + ',' + latS + ',0</coordinates></Point>',
+    '    </Placemark>',
+    '  </Document>',
+    '</kml>'
+  ].join('\n');
+
+  document.getElementById('ge-link').href =
+    'https://earth.google.com/web/@' + latS + ',' + lngS + ',1000a,2000d';
+
+  var blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+  var kmlLink = document.getElementById('kml-link');
+  kmlLink.href = URL.createObjectURL(blob);
+  kmlLink.download = 'kibale_' + latS + '_' + lngS + '.kml';
+}
+
+map.on('click', function(e) { handleMapClick(e.latlng.lat, e.latlng.lng); });
+
+// ── Field plot overlays ───────────────────────────────────────────────────────
+function fmtAgbd(v) {
+  return v !== null && v !== undefined
+    ? '<td>' + v.toFixed(1) + ' Mg ha&#8315;&#185;</td>'
+    : '<td class="nodata">—</td>';
+}
+
+function plotPopupHtml(p) {
+  var has17 = !!p.y2017;
+  var has20 = !!p.y2020;
+
+  var rows = '';
+  // Header
+  rows += '<tr><th>Metric</th>';
+  if (has17) rows += '<th>2017</th>';
+  if (has20) rows += '<th>2020</th>';
+  rows += '</tr>';
+
+  // Measured AGBD
+  rows += '<tr><td>Measured AGBD</td>';
+  if (has17) rows += fmtAgbd(p.y2017.plot_agbd);
+  if (has20) rows += fmtAgbd(p.y2020.plot_agbd);
+  rows += '</tr>';
+
+  // Predicted AGBD
+  rows += '<tr><td>Predicted AGBD</td>';
+  if (has17) rows += fmtAgbd(p.y2017.pred_agbd);
+  if (has20) rows += fmtAgbd(p.y2020.pred_agbd);
+  rows += '</tr>';
+
+  var deltaHtml = '';
+  if (has17 && has20 && p.y2017.plot_agbd !== null && p.y2020.plot_agbd !== null) {
+    var delta = p.y2020.plot_agbd - p.y2017.plot_agbd;
+    var cls   = delta >= 0 ? 'pos' : 'neg';
+    var sign  = delta >= 0 ? '+' : '';
+    deltaHtml = '<div class="pp-delta">Measured &#916; 2017&#8594;2020: ' +
+      '<span class="' + cls + '">' + sign + delta.toFixed(1) + ' Mg ha&#8315;&#185;</span></div>';
+  }
+
+  return '<div class="pp-title">Plot ' + p.id + '</div>' +
+    '<table class="pp-table">' + rows + '</table>' + deltaHtml;
+}
+
+// Create two LayerGroups (2017 and 2020)
+var plotLayer17 = L.layerGroup().addTo(map);
+var plotLayer20 = L.layerGroup().addTo(map);
+
+var styleBase = { radius: 5, weight: 1.5, fillOpacity: 0.85 };
+var style17   = Object.assign({}, styleBase, { color: '#fff', fillColor: '#00bcd4' }); // cyan
+var style20   = Object.assign({}, styleBase, { color: '#fff', fillColor: '#3182bd' }); // blue
+
+PLOT_DATA.forEach(function(p) {
+  var ll = [p.lat, p.lng];
+  var html = plotPopupHtml(p);
+
+  if (p.y2017) {
+    L.circleMarker(ll, style17)
+      .bindPopup(html, { className: 'plot-popup', maxWidth: 320 })
+      .on('click', function() { handleMapClick(p.lat, p.lng); })
+      .addTo(plotLayer17);
+  }
+  if (p.y2020) {
+    L.circleMarker(ll, style20)
+      .bindPopup(html, { className: 'plot-popup', maxWidth: 320 })
+      .on('click', function() { handleMapClick(p.lat, p.lng); })
+      .addTo(plotLayer20);
+  }
+});
+
+// Checkbox toggles
+document.getElementById('chk-plots-2017').addEventListener('change', function() {
+  if (this.checked) plotLayer17.addTo(map); else map.removeLayer(plotLayer17);
+});
+document.getElementById('chk-plots-2020').addEventListener('change', function() {
+  if (this.checked) plotLayer20.addTo(map); else map.removeLayer(plotLayer20);
+});
+</script>
+</body>
+</html>
