@@ -195,8 +195,8 @@
     .pp-table td.nodata { color: #aaa; font-weight: 400; font-style: italic; }
     .pp-delta  { margin-top: 6px; padding-top: 5px; border-top: 1px solid #0f3460; color: #ccc; }
     .pp-delta span { font-weight: 700; }
-    .pp-delta .pos { color: #fc8181; }
-    .pp-delta .neg { color: #7ee8a2; }
+    .pp-delta .pos { color: #90cdf4; }
+    .pp-delta .neg { color: #90cdf4; }
 
     /* ── Server warning banner ───────────────────────────────────────────── */
     #server-warning {
@@ -635,12 +635,6 @@ function plotPopupHtml(p) {
   rows += '<tr><td>Measured AGBD</td>';
   if (has17) rows += fmtAgbd(p.y2017.plot_agbd);
   if (has20) rows += fmtAgbd(p.y2020.plot_agbd);
-  rows += '</tr>';
-
-  // Predicted AGBD
-  rows += '<tr><td>Predicted AGBD</td>';
-  if (has17) rows += fmtAgbd(p.y2017.pred_agbd);
-  if (has20) rows += fmtAgbd(p.y2020.pred_agbd);
   rows += '</tr>';
 
   var deltaHtml = '';
