@@ -249,14 +249,34 @@
     }
     .ctrl-name input[type=checkbox] { accent-color: #41ab5d; width: 13px; height: 13px; cursor: pointer; flex-shrink: 0; }
     .ctrl-name span { white-space: nowrap; }
+
+    /* ── Header description ──────────────────────────────────────────────── */
+    #header-desc {
+      font-size: 0.7rem;
+      color: #bbb;
+      max-width: 620px;
+      line-height: 1.5;
+      border-left: 2px solid #0f3460;
+      padding-left: 12px;
+      margin-left: 18px;
+    }
   </style>
 </head>
 <body>
 
 <header>
   <div>
-    <h1>Kibale AGBD Map Comparison</h1>
+    <h1>Kibale Aboveground Biomass Map Explorer</h1>
     <div class="sub">Drag the slider to compare &nbsp;|&nbsp; Click the map to open in Google Earth Pro</div>
+  </div>
+  <div id="header-desc">
+    Aboveground biomass maps over Kibale, Uganda from two modeling approaches.
+    The <strong style="color:#ddd;">left side</strong> uses embeddings from the AlphaEarth Foundation model;
+    the <strong style="color:#ddd;">right side</strong> uses handcrafted Landsat composites as predictors.
+    Drag the slider to compare the two. Field plot circles show ground-based AGBD measurements in
+    <strong style="color:#9c27b0;">2017</strong> and <strong style="color:#3182bd;">2020</strong> —
+    click a plot to view field-based values. Click anywhere on the map to retrieve model-estimated values
+    or view the location on Google Earth.
   </div>
 </header>
 
